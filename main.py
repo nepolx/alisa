@@ -1,9 +1,10 @@
 from flask import Flask, request
 import logging
 import json
-import random
-from a import searching_recipe_name, random_meal, searching_recipe_product, searching_by_id, list_areas, \
-    searching_recipe_area
+from googletrans import Translator
+from a import searching_recipe_name, random_meal, searching_recipe_product, searching_by_id, searching_recipe_area
+from app import get_cor, get_shops, YandexImages
+import requests
 
 app = Flask(__name__)
 
@@ -12,12 +13,28 @@ logging.basicConfig(level=logging.INFO)
 buttons = ['Таймер', 'Поиск рецептов', 'Ближайший магазин', 'Пока']
 btn_recipes = ['По названию', 'По ингридиенту', 'По области', 'Любое блюдо', 'Другое']
 btn_recipes_1 = ['video', 'Хочу еще спросить!', 'Пока']
-name = ''
-status = 0
 user_id = 0
-sessionStorage = {}
-dict_for_srp = {}  # ключ - продукт, значение: список из списка id блюд и номер, которое нужно показать
-dict_for_sra = {}
+sessionStorage = {}  # для каждого юзера своя инфа
+# dict_for_srp = {}  # ключ - продукт, значение: список из списка id блюд и номер, которое нужно показать
+
+yandex = YandexImages()
+yandex.set_auth_token(token='y0_AgAAAABDXC3pAAT7owAAAADdHZRtE0yZizUfTESzM4BFRe8lhS52uFA')
+yandex.skills = 'dd9896e2-415e-493c-8dd2-dda4d5e6dac9'
+
+url = 'https://www.themealdb.com/api/json/v1/1/list.php?a=list'
+areas = []
+response = requests.request("GET", url)
+json_response = response.json()
+for el in json_response['meals']:
+    areas.append(el['strArea'])
+
+
+def list_areas(area):
+    translator = Translator()
+    area = translator.translate(area, dest='en').text
+    if area in areas:
+        return True
+    return False
 
 
 @app.route('/post', methods=['POST'])
@@ -36,17 +53,19 @@ def main():
 
 
 def handle_dialog(res, req):
-    global name, status, user_id
+    global user_id
     user_id = req['session']['user_id']
 
     # если пользователь новый, то просим его представиться.
     if req['session']['new']:
-        status = 0
         res['response']['text'] = 'Привет! Давай знакомиться. Как тебя зовут?'
         # создаем словарь в который в будущем положим имя пользователя
         sessionStorage[user_id] = {
             'first_name': None
         }
+        sessionStorage[user_id]["status"] = 0
+        sessionStorage[user_id]["dict_for_srp"] = {}
+        sessionStorage[user_id]["dict_for_sra"] = {}
         return
 
     # если пользователь не новый, то попадаем сюда.
@@ -63,7 +82,6 @@ def handle_dialog(res, req):
         # И спрашиваем какой город он хочет увидеть.
         else:
             sessionStorage[user_id]['first_name'] = first_name
-            name = first_name.lower().capitalize()
             res['response'][
                 'text'] = 'Приятно познакомиться, ' \
                           + first_name.title() \
@@ -79,16 +97,18 @@ def handle_dialog(res, req):
     # то это говорит о том, что он уже говорит о городе,
     # что хочет увидеть.
     else:
-        if not status or status == 'error':
+        if not sessionStorage[user_id]["status"] or sessionStorage[user_id]["status"] == 'error':
             get_answer(req, res)
-        elif status == 'recipes':
+        elif sessionStorage[user_id]["status"] == 'recipes':
             recipes(req, res)
-        elif 'search_recipe' in status:
+        elif 'search_recipe' in sessionStorage[user_id]["status"]:
             search_recipe(req, res)
-        elif status == 'choice':
+        elif sessionStorage[user_id]["status"] == 'choice':
             after_answer(req, res)
-        elif status == 'random_recipe':
+        elif sessionStorage[user_id]["status"] == 'random_recipe':
             random_recipe(req, res)
+        elif sessionStorage[user_id]["status"] == 'shops' or sessionStorage[user_id]["status"] == 'get_address':
+            near_market(req, res)
 
         # # если этот город среди известных нам,
         # # то показываем его (выбираем одну из двух картинок случайно)
@@ -101,11 +121,11 @@ def handle_dialog(res, req):
 
 
 def after_answer(req, res):
-    global status
-    status = 0
+    sessionStorage[user_id]["status"] = 0
     for el in req['request']['nlu']['tokens']:
         if 'пока' in el:
             res['response']['text'] = 'Была рада тебе помочь. Пока!'
+            yandex.deleteAllImage()  # проверка на память
             res['response']['end_session'] = True
             return
     res['response']['text'] = 'Я могу еще чем-то помочь?'
@@ -118,16 +138,15 @@ def after_answer(req, res):
 
 
 def get_answer(req, res):  # рецепт, таймер ил итд
-    global status
     a = False
     for el in req['request']['nlu']['tokens']:
         if 'таймер' in el:
             timer(req, res)
-            status = 'timer'
+            sessionStorage[user_id]["status"] = 'timer'
             a = True
         elif 'рецепт' in el:
             a = True
-            status = 'recipes'
+            sessionStorage[user_id]["status"] = 'recipes'
             res['response']['text'] = 'Я могу показать тебе рецепт определенного блюда, рецепт рандомного блюда и тд.'
             res['response']['buttons'] = [
                 {
@@ -138,14 +157,15 @@ def get_answer(req, res):  # рецепт, таймер ил итд
 
         elif 'магазин' in el:  # пересмотреть
             a = True
-            status = 'shops'
-            near_market(res)
+            sessionStorage[user_id]["status"] = 'shops'
+            res['response'][
+                'text'] = 'Скажи полный адрес своего местоположения. Например, город Пушкина, ул Колотушкина, д 7'
         elif 'пока' in el:
             res['response']['text'] = 'Была рада тебе помочь. Пока!'
             res['response']['end_session'] = True
             return
     if not a:
-        status = 'error'
+        sessionStorage[user_id]["status"] = 'error'
         res['response']['text'] = 'Я не понимаю тебя. Попробуй воспользоваться подсказками!'
         res['response']['buttons'] = [
             {
@@ -161,7 +181,6 @@ def timer(req, res):
 
 
 def recipes(req, res):
-    global status
     cur_status = ''
     options = {'name_recipe': 0, 'random_recipe': 0,
                'product_recipe': 0, 'exit': 0, 'area_recipe': 0}  # необходимое количество соответсвенно 1, 2, 2, 1, 2
@@ -195,17 +214,20 @@ def recipes(req, res):
     elif options['name_recipe'] == 1:
         cur_status = 'name_recipe'
 
-    if req['request']['command'] == 'поиск по названию' or cur_status == 'name_recipe':
-        res['response']['text'] = f'{name}! Скажи только блюдо, рецепт которого ты хочешь найти.'
-        status = 'search_recipe_name'
+    if req['request']['command'] == 'по названию' or cur_status == 'name_recipe':
+        res['response'][
+            'text'] = f'{sessionStorage[user_id]["first_name"]}! Скажи только блюдо, рецепт которого ты хочешь найти.'
+        sessionStorage[user_id]["status"] = 'search_recipe_name'
     elif req['request']['command'] == 'любое блюдо' or cur_status == 'random_recipe':  # не знаю что выбрать
         random_recipe(req, res)
     elif req['request']['command'] == 'по ингридиенту' or cur_status == 'product_recipe':
-        res['response']['text'] = f'{name}! Скажи только продукт, который есть в блюде.'
-        status = 'search_recipe_product'
+        res['response'][
+            'text'] = f'{sessionStorage[user_id]["first_name"]}! Скажи только продукт, который есть в блюде.'
+        sessionStorage[user_id]["status"] = 'search_recipe_product'
     elif req['request']['command'] == 'по области' or cur_status == 'area_recipe':
-        res['response']['text'] = f'{name}! Скажи вид нужной кухни. Например, китайская.'
-        status = 'search_recipe_area'
+        res['response'][
+            'text'] = f'{sessionStorage[user_id]["first_name"]}! Скажи вид нужной кухни. Например, китайская.'
+        sessionStorage[user_id]["status"] = 'search_recipe_area'
     elif options['exit'] > 0:
         after_answer(req, res)
     else:
@@ -219,10 +241,9 @@ def recipes(req, res):
 
 
 def search_recipe(req, res):
-    global status, dict_for_srp, dict_for_sra
     # print(req['request']['command'])
-    if status == 'search_recipe_name':
-        status = 'choice'
+    if sessionStorage[user_id]["status"] == 'search_recipe_name':
+        sessionStorage[user_id]["status"] = 'choice'
         recipe = searching_recipe_name(req['request']['command'])
         if recipe:
             res['response']['buttons'] = [
@@ -239,20 +260,22 @@ def search_recipe(req, res):
             res['response']['text'] = f"Я нашла рецепт!"
         else:
             res['response']['text'] = f"Извини, я такого блюда не знаю..."
-    elif status == 'search_recipe_product':
-        status = 'choice'
+    elif sessionStorage[user_id]["status"] == 'search_recipe_product':
+        sessionStorage[user_id]["status"] = 'choice'
         recipe = searching_recipe_product(req['request']['command'])
         if recipe:
-            if req['request']['command'] not in dict_for_srp:
-                dict_for_srp[req['request']['command']] = [recipe, 0]
+            if req['request']['command'] not in sessionStorage[user_id]["dict_for_srp"]:
+                sessionStorage[user_id]["dict_for_srp"][req['request']['command']] = [recipe, 0]
             else:
-                print(len(dict_for_srp[req['request']['command']][0]))
-                if dict_for_srp[req['request']['command']][1] + 1 == len(dict_for_srp[req['request']['command']][0]):
-                    dict_for_srp[req['request']['command']][1] = 0
+                # print(len(dict_for_srp[req['request']['command']][0]))
+                if sessionStorage[user_id]["dict_for_srp"][req['request']['command']][1] + 1 == \
+                        len(sessionStorage[user_id]["dict_for_srp"][req['request']['command']][0]):
+                    sessionStorage[user_id]["dict_for_srp"][req['request']['command']][1] = 0
                 else:
-                    dict_for_srp[req['request']['command']][1] += 1
+                    sessionStorage[user_id]["dict_for_srp"][req['request']['command']][1] += 1
             recipe = searching_by_id(
-                dict_for_srp[req['request']['command']][0][dict_for_srp[req['request']['command']][1]])
+                sessionStorage[user_id]["dict_for_srp"][req['request']['command']][0][
+                    sessionStorage[user_id]["dict_for_srp"][req['request']['command']][1]])
             res['response']['buttons'] = [
                 {
                     'title': el,
@@ -268,18 +291,21 @@ def search_recipe(req, res):
         else:
             res['response']['text'] = f"Извини, я не смогла найти что-то подходящее..."
     else:
-        status = 'choice'
+        sessionStorage[user_id]["status"] = 'choice'
         if list_areas(req['request']['command']):
-            if req['request']['command'] not in dict_for_sra:
-                dict_for_sra[req['request']['command']] = [searching_recipe_area(req['request']['command']), 0]
+            if req['request']['command'] not in sessionStorage[user_id]["dict_for_sra"]:
+                sessionStorage[user_id]["dict_for_sra"][req['request']['command']] = [
+                    searching_recipe_area(req['request']['command']), 0]
             else:
-                if dict_for_sra[req['request']['command']][1] + 1 == len(dict_for_sra[req['request']['command']][0]):
-                    dict_for_sra[req['request']['command']][1] = 0
+                if sessionStorage[user_id]["dict_for_sra"][req['request']['command']][1] + 1 \
+                        == len(sessionStorage[user_id]["dict_for_sra"][req['request']['command']][0]):
+                    sessionStorage[user_id]["dict_for_sra"][req['request']['command']][1] = 0
                 else:
-                    print(len(dict_for_sra[req['request']['command']][0]))
-                    dict_for_sra[req['request']['command']][1] += 1
+                    # print(len(dict_for_sra[req['request']['command']][0]))
+                    sessionStorage[user_id]["dict_for_sra"][req['request']['command']][1] += 1
             recipe = searching_by_id(
-                dict_for_sra[req['request']['command']][0][dict_for_sra[req['request']['command']][1]])
+                sessionStorage[user_id]["dict_for_sra"][req['request']['command']][0][
+                    sessionStorage[user_id]["dict_for_sra"][req['request']['command']][1]])
             res['response']['buttons'] = [
                 {
                     'title': el,
@@ -297,10 +323,8 @@ def search_recipe(req, res):
 
 
 def random_recipe(req, res):
-    global status
-    status = 'choice'
+    sessionStorage[user_id]["status"] = 'choice'
     recipe = random_meal()
-    print(5)
     res['response']['text'] = "Попробуй приготовить это!"
     res['response']['buttons'] = [
         {
@@ -315,8 +339,38 @@ def random_recipe(req, res):
     }
 
 
-def near_market(res):
-    res['response']['text'] = 'Поиск магазина'
+def near_market(req, res):
+    address = req['request']['command']
+    if sessionStorage[user_id]["status"] == 'get_address':
+        if 'выйти' in address:  # другие варианты
+            sessionStorage[user_id]["status"] = 'choice'
+            after_answer(req, res)
+            return
+    sessionStorage[user_id]["status"] = 'get_address'
+    cor = get_cor(address)
+    if cor:
+        if get_shops(cor):
+            image_id = yandex.downloadImageFile('map.png')['id']
+            res['response']['card'] = {}
+            res['response']['card']['type'] = 'BigImage'
+            res['response']['card']['title'] = 'Я отметила на карте ближайшие к тебе магазины. Вперед за покупками!'
+            res['response']['card']['image_id'] = image_id
+            res['response']['text'] = 'Я отметила на карте ближайшие к тебе магазины. Вперед за покупками!'
+            sessionStorage[user_id]["status"] = 'choice'
+        else:
+            res['response']['text'] = 'Я не нашла магазинов поблизости. Используй нашу Яндекс Доставку!'
+            res['response']['buttons'] = [
+                {
+                    'title': 'Выйти',
+                    'hide': True
+                }]
+    else:
+        res['response']['text'] = 'Я не могу найти тебя. Попробуй сказать так: город А улица Б дом 1'
+        res['response']['buttons'] = [
+            {
+                'title': 'Выйти',
+                'hide': True
+            }]
 
 
 def get_first_name(req):
