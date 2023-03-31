@@ -124,14 +124,17 @@ def get_cor(address):
 
 
 def get_shops(cor):
-    map_request = f"https://search-maps.yandex.ru/v1/?text=магазин&type=biz&ll={cor}&spn=0.00007,0.00199&lang=ru_RU&apikey=f66421bb-4c50-4ab7-a329-852d1e17fb13"
+    map_request = f"https://search-maps.yandex.ru/v1/?text=магазин&type=biz&ll={cor}&spn=0.00107,0.00199&lang=ru_RU&apikey=f66421bb-4c50-4ab7-a329-852d1e17fb13"
+    m1 = f"https://search-maps.yandex.ru/v1/?text=кафе ресторан питание&type=biz&ll={cor}&spn=0.00007,0.00199&lang=ru_RU&apikey=f66421bb-4c50-4ab7-a329-852d1e17fb13"
     response = requests.get(map_request).json()
     shops = []
+    addresses = []
     for i in range(len(response["features"])):
         t = response["features"][i]["geometry"]["coordinates"]
         shops.append(str(t[0]) + ',' + str(t[1]))
+        addresses.append(response["features"][i]["properties"]["description"])
         # print(response["features"][i]["properties"]["description"])  # адрес
-        # print(response["features"][i]["properties"]["CompanyMetaData"]["name"])
+        print(response["features"][i]["properties"]["CompanyMetaData"]["name"])
     if shops:
         map_request = f"https://static-maps.yandex.ru/1.x/?l=map&pt={cor},pm2rdm~{shops[0]},pm2blm~{shops[1]},pm2vvm"
         response = requests.get(map_request)
@@ -149,7 +152,6 @@ def get_shops(cor):
     with open(map_file, "wb") as file:
         file.write(response.content)
 
-    # Инициализируем pygame
     # pygame.init()
     # screen = pygame.display.set_mode((600, 450))
     # screen.blit(pygame.image.load(map_file), (0, 0))
@@ -157,9 +159,9 @@ def get_shops(cor):
     # while pygame.event.wait().type != pygame.QUIT:
     #     pass
     # pygame.quit()
-
+    #
     # os.remove(map_file)
-    return True
+    return addresses
 
-# cor = get_cor('Магнитогорск ул Ангарская д 6')
+# cor = get_cor('г магнитогорск ул советская д 10')
 # get_shops(cor)

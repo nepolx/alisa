@@ -81,7 +81,7 @@ def handle_dialog(res, req):
         # если нашли, то приветствуем пользователя.
         # И спрашиваем какой город он хочет увидеть.
         else:
-            sessionStorage[user_id]['first_name'] = first_name
+            sessionStorage[user_id]['first_name'] = first_name.lower().capitalize()
             res['response'][
                 'text'] = 'Приятно познакомиться, ' \
                           + first_name.title() \
@@ -349,11 +349,14 @@ def near_market(req, res):
     sessionStorage[user_id]["status"] = 'get_address'
     cor = get_cor(address)
     if cor:
-        if get_shops(cor):
+        shops = get_shops(cor)
+        if shops:
             image_id = yandex.downloadImageFile('map.png')['id']
             res['response']['card'] = {}
             res['response']['card']['type'] = 'BigImage'
-            res['response']['card']['title'] = 'Я отметила на карте ближайшие к тебе магазины. Вперед за покупками!'
+            ad1, ad2 = ' '.join(shops[0].split(', ')[:-2]), ' '.join(shops[1].split(', ')[:-2])
+            text = f"Я нашла магазины по адресам: {ad1}, {ad2}. "
+            res['response']['card']['title'] = text + 'Вперед за покупками!'
             res['response']['card']['image_id'] = image_id
             res['response']['text'] = 'Я отметила на карте ближайшие к тебе магазины. Вперед за покупками!'
             sessionStorage[user_id]["status"] = 'choice'
