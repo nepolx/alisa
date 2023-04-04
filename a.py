@@ -10,14 +10,16 @@ def searching_recipe_name(meal):
     try:
         response = requests.request("GET", url)
         json_response = response.json()
-        # recipe = json_response['meals'][0]['strInstructions']
+        recipe = json_response['meals'][0]['strInstructions'].splitlines()
+        print(recipe)
+        # print(translator.translate(recipe, dest='ru'))
         # recipe = translator.translate(recipe, dest='ru').text
         video = json_response['meals'][0]['strYoutube']
-        return video
+        return video, recipe
     except:
         return ''
 
-
+searching_recipe_name('омлет')
 def searching_recipe_product(product):
     translator = Translator()
     product = '_'.join(translator.translate(product, dest='en').text.split())

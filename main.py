@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 
 buttons = ['Таймер', 'Поиск рецептов', 'Ближайший магазин', 'Пока']
 btn_recipes = ['По названию', 'По ингридиенту', 'По области', 'Любое блюдо', 'Другое']
-btn_recipes_1 = ['video', 'Хочу еще спросить!', 'Пока']
+btn_recipes_1 = ['video', 'Режим готовки', 'Хочу еще спросить!', 'Пока']
 user_id = 0
 sessionStorage = {}  # для каждого юзера своя инфа
 # dict_for_srp = {}  # ключ - продукт, значение: список из списка id блюд и номер, которое нужно показать
@@ -66,6 +66,8 @@ def handle_dialog(res, req):
         sessionStorage[user_id]["status"] = 0
         sessionStorage[user_id]["dict_for_srp"] = {}
         sessionStorage[user_id]["dict_for_sra"] = {}
+        sessionStorage[user_id]["cooking_mode"] = {}
+
         return
 
     # если пользователь не новый, то попадаем сюда.
@@ -109,6 +111,8 @@ def handle_dialog(res, req):
             random_recipe(req, res)
         elif sessionStorage[user_id]["status"] == 'shops' or sessionStorage[user_id]["status"] == 'get_address':
             near_market(req, res)
+        elif sessionStorage[user_id]["status"] == 'cooking_mode':
+            cooking_mode(req, res)
 
         # # если этот город среди известных нам,
         # # то показываем его (выбираем одну из двух картинок случайно)
@@ -120,6 +124,36 @@ def handle_dialog(res, req):
         #     res['response']['text'] = 'Я угадал!'
 
 
+def get_recipe_for_mode(recipe):
+    res = []
+    for el in recipe:
+        el = list(map(lambda x: x + '.' if x[-1] != '.' else x + '', el.split('. ')))
+        for x in el:
+            res.append(x)
+    return res
+
+
+def cooking_mode(req, res):
+    for el in req['request']['nlu']['tokens']:
+        print(el)
+        if 'не' in el or 'пока' in el or 'выйти' in el:
+            print(1)
+            after_answer(req, res)
+            return
+        elif 'да' in el or 'начина' in el or 'приступ' in el or 'начн' in el or 'точно':
+            #print(sessionStorage[user_id]["cooking_mode"]["recipe"])
+            recipe = get_recipe_for_mode(sessionStorage[user_id]["cooking_mode"]["recipe"])
+            print(recipe)
+        return
+    res['response']['text'] = 'Я тебя не понимаю. Попробуй использовать подсказки. Начинаем?'
+    res['response']['buttons'] = [
+        {
+            'title': 'Да',
+            'hide': True
+        }, {'title': 'Нет',
+            'hide': True}]
+
+
 def after_answer(req, res):
     sessionStorage[user_id]["status"] = 0
     for el in req['request']['nlu']['tokens']:
@@ -128,6 +162,16 @@ def after_answer(req, res):
             yandex.deleteAllImage()  # проверка на память
             res['response']['end_session'] = True
             return
+    if req['request']['command'] == 'режим готовки':
+        res['response']['text'] = 'режим готовки трали вали. Начинаем?'
+        res['response']['buttons'] = [
+            {
+                'title': 'Да',
+                'hide': True
+            }, {'title': 'Нет',
+                'hide': True}]
+        sessionStorage[user_id]["status"] = 'cooking_mode'
+        return
     res['response']['text'] = 'Я могу еще чем-то помочь?'
     res['response']['buttons'] = [
         {
@@ -244,7 +288,9 @@ def search_recipe(req, res):
     # print(req['request']['command'])
     if sessionStorage[user_id]["status"] == 'search_recipe_name':
         sessionStorage[user_id]["status"] = 'choice'
-        recipe = searching_recipe_name(req['request']['command'])
+        video, recipe = searching_recipe_name(req['request']['command'])[0], \
+                        searching_recipe_name(req['request']['command'])[1]
+        sessionStorage[user_id]["cooking_mode"]["recipe"] = recipe  # рецепт для режима готовки
         if recipe:
             res['response']['buttons'] = [
                 {
@@ -255,7 +301,7 @@ def search_recipe(req, res):
             res['response']['buttons'][0] = {
                 'title': 'Вот твой рецепт!',
                 'hide': True,
-                'url': recipe
+                'url': video
             }
             res['response']['text'] = f"Я нашла рецепт!"
         else:
