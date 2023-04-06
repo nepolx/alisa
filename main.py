@@ -13,6 +13,7 @@ logging.basicConfig(level=logging.INFO)
 buttons = ['Таймер', 'Поиск рецептов', 'Ближайший магазин', 'Пока']
 btn_recipes = ['По названию', 'По ингридиенту', 'По области', 'Любое блюдо', 'Другое']
 btn_recipes_1 = ['video', 'Режим готовки', 'Хочу еще спросить!', 'Пока']
+btn_cooking_mode = ['Назад', 'Дальше', 'Хватит']
 user_id = 0
 sessionStorage = {}  # для каждого юзера своя инфа
 # dict_for_srp = {}  # ключ - продукт, значение: список из списка id блюд и номер, которое нужно показать
@@ -111,6 +112,8 @@ def handle_dialog(res, req):
             random_recipe(req, res)
         elif sessionStorage[user_id]["status"] == 'shops' or sessionStorage[user_id]["status"] == 'get_address':
             near_market(req, res)
+        elif sessionStorage[user_id]["status"] == 'cooking_mode_action':
+            cooking_mode_action(req, res)
         elif sessionStorage[user_id]["status"] == 'cooking_mode':
             cooking_mode(req, res)
 
@@ -127,23 +130,89 @@ def handle_dialog(res, req):
 def get_recipe_for_mode(recipe):
     res = []
     for el in recipe:
-        el = list(map(lambda x: x + '.' if x[-1] != '.' else x + '', el.split('. ')))
+        el = list(map(lambda x: x + '.' if x and x[-1] != '.' else x + '', el.split('.')))
         for x in el:
-            res.append(x)
+            res.append(x.strip())
+    res = list(filter(None, res))
     return res
+
+
+def cooking_mode_on(req, res):
+    part = sessionStorage[user_id]["cooking_mode"]["part"]
+    recipe = sessionStorage[user_id]["cooking_mode"]["recipe"]
+    ans = recipe[part:part + 2 if (part + 2) < len(recipe) else len(recipe)]
+    print(ans)
+    res['response']['text'] = ' '.join(ans)
+    if part == 0:
+        btn = btn_cooking_mode[1:]
+    elif part >= len(recipe):
+        btn = btn_cooking_mode[2]
+    else:
+        btn = btn_cooking_mode
+    res['response']['buttons'] = [
+        {
+            'title': el,
+            'hide': True
+        } for el in btn
+    ]
+    sessionStorage[user_id]["cooking_mode"]["part"] += 2
+    sessionStorage[user_id]["status"] = 'cooking_mode_action'
+
+
+def cooking_mode_action(req, res):
+    for el in req['request']['nlu']['tokens']:
+        if 'назад' in el or 'вернись' in el or 'повтор' in el:
+            print(sessionStorage[user_id]["cooking_mode"]["part"])
+            if sessionStorage[user_id]["cooking_mode"]["part"] != 2:
+                sessionStorage[user_id]["cooking_mode"]["part"] -= 4
+                cooking_mode_on(req, res)
+                return
+            else:
+                res['response']['text'] = 'Я не могу вернуться назад. Мы только начали!'
+                res['response']['buttons'] = [
+                    {
+                        'title': el,
+                        'hide': True
+                    } for el in btn_cooking_mode[1:]
+                ]
+            return
+        if 'дальше' in el or 'след' in el:
+            if sessionStorage[user_id]["cooking_mode"]["part"] < len(sessionStorage[user_id]["cooking_mode"]["recipe"]):
+                cooking_mode_on(req, res)
+                return
+            else:
+                res['response']['text'] = 'Готовка уже завершена.'
+                res['response']['buttons'] = [
+                    {
+                        'title': 'Хватит',
+                        'hide': True
+                    }]
+
+            return
+        if 'хватит' in el or 'прекрат' in el or 'кон' in el or 'выйти' in el:
+            after_answer(req, res)
+            return
+    res['response']['text'] = 'Я тебя не понимаю. Попробуй использовать подсказки. Продолжаем готовку?'
+    res['response']['buttons'] = [
+        {
+            'title': el,
+            'hide': True
+        } for el in btn_cooking_mode
+    ]
 
 
 def cooking_mode(req, res):
     for el in req['request']['nlu']['tokens']:
-        print(el)
         if 'не' in el or 'пока' in el or 'выйти' in el:
-            print(1)
             after_answer(req, res)
             return
         elif 'да' in el or 'начина' in el or 'приступ' in el or 'начн' in el or 'точно':
-            #print(sessionStorage[user_id]["cooking_mode"]["recipe"])
+            # print(sessionStorage[user_id]["cooking_mode"]["recipe"])
             recipe = get_recipe_for_mode(sessionStorage[user_id]["cooking_mode"]["recipe"])
-            print(recipe)
+            sessionStorage[user_id]["cooking_mode"]["recipe"] = recipe
+            sessionStorage[user_id]["cooking_mode"]["part"] = 0
+            cooking_mode_on(req, res)
+            # print(recipe)
         return
     res['response']['text'] = 'Я тебя не понимаю. Попробуй использовать подсказки. Начинаем?'
     res['response']['buttons'] = [
@@ -155,13 +224,27 @@ def cooking_mode(req, res):
 
 
 def after_answer(req, res):
-    sessionStorage[user_id]["status"] = 0
     for el in req['request']['nlu']['tokens']:
         if 'пока' in el:
             res['response']['text'] = 'Была рада тебе помочь. Пока!'
             yandex.deleteAllImage()  # проверка на память
             res['response']['end_session'] = True
             return
+
+    if req['request']['command'] == 'вот твой рецепт':
+        res['response']['buttons'] = [
+            {
+                'title': el,
+                'hide': True
+            } for el in btn_recipes_1
+        ]
+        res['response']['buttons'][0] = {
+            'title': 'Вот твой рецепт!',
+            'hide': True,
+            'url': sessionStorage[user_id]["cooking_mode"]["video"]
+        }
+        res['response']['text'] = f"Я нашла рецепт!"
+        return
     if req['request']['command'] == 'режим готовки':
         res['response']['text'] = 'режим готовки трали вали. Начинаем?'
         res['response']['buttons'] = [
@@ -172,6 +255,7 @@ def after_answer(req, res):
                 'hide': True}]
         sessionStorage[user_id]["status"] = 'cooking_mode'
         return
+    sessionStorage[user_id]["status"] = 0
     res['response']['text'] = 'Я могу еще чем-то помочь?'
     res['response']['buttons'] = [
         {
@@ -179,6 +263,10 @@ def after_answer(req, res):
             'hide': True
         } for el in buttons
     ]
+
+
+def after_video(req, res):
+    pass
 
 
 def get_answer(req, res):  # рецепт, таймер ил итд
@@ -204,6 +292,12 @@ def get_answer(req, res):  # рецепт, таймер ил итд
             sessionStorage[user_id]["status"] = 'shops'
             res['response'][
                 'text'] = 'Скажи полный адрес своего местоположения. Например, город Пушкина, ул Колотушкина, д 7'
+            res['response']['buttons'] = [
+                {
+                    'title': 'Хватит',
+                    'hide': True
+                }
+            ]
         elif 'пока' in el:
             res['response']['text'] = 'Была рада тебе помочь. Пока!'
             res['response']['end_session'] = True
@@ -288,10 +382,11 @@ def search_recipe(req, res):
     # print(req['request']['command'])
     if sessionStorage[user_id]["status"] == 'search_recipe_name':
         sessionStorage[user_id]["status"] = 'choice'
-        video, recipe = searching_recipe_name(req['request']['command'])[0], \
-                        searching_recipe_name(req['request']['command'])[1]
-        sessionStorage[user_id]["cooking_mode"]["recipe"] = recipe  # рецепт для режима готовки
-        if recipe:
+        ans = searching_recipe_name(req['request']['command'])
+        if ans:
+            video, recipe = ans[0], ans[1]
+            sessionStorage[user_id]["cooking_mode"]["recipe"] = recipe  # рецепт для режима готовки
+            sessionStorage[user_id]["cooking_mode"]["video"] = video
             res['response']['buttons'] = [
                 {
                     'title': el,
@@ -306,6 +401,7 @@ def search_recipe(req, res):
             res['response']['text'] = f"Я нашла рецепт!"
         else:
             res['response']['text'] = f"Извини, я такого блюда не знаю..."
+            return
     elif sessionStorage[user_id]["status"] == 'search_recipe_product':
         sessionStorage[user_id]["status"] = 'choice'
         recipe = searching_recipe_product(req['request']['command'])
@@ -319,9 +415,12 @@ def search_recipe(req, res):
                     sessionStorage[user_id]["dict_for_srp"][req['request']['command']][1] = 0
                 else:
                     sessionStorage[user_id]["dict_for_srp"][req['request']['command']][1] += 1
-            recipe = searching_by_id(
+            r = searching_by_id(
                 sessionStorage[user_id]["dict_for_srp"][req['request']['command']][0][
                     sessionStorage[user_id]["dict_for_srp"][req['request']['command']][1]])
+            video, recipe = r[0], r[1]
+            sessionStorage[user_id]["cooking_mode"]["recipe"] = recipe
+            sessionStorage[user_id]["cooking_mode"]["video"] = video
             res['response']['buttons'] = [
                 {
                     'title': el,
@@ -331,11 +430,12 @@ def search_recipe(req, res):
             res['response']['buttons'][0] = {
                 'title': 'Вот твой рецепт!',
                 'hide': True,
-                'url': recipe
+                'url': video
             }
             res['response']['text'] = f"Я нашла рецепт!"
         else:
             res['response']['text'] = f"Извини, я не смогла найти что-то подходящее..."
+        return
     else:
         sessionStorage[user_id]["status"] = 'choice'
         if list_areas(req['request']['command']):
@@ -349,9 +449,12 @@ def search_recipe(req, res):
                 else:
                     # print(len(dict_for_sra[req['request']['command']][0]))
                     sessionStorage[user_id]["dict_for_sra"][req['request']['command']][1] += 1
-            recipe = searching_by_id(
+            r = searching_by_id(
                 sessionStorage[user_id]["dict_for_sra"][req['request']['command']][0][
                     sessionStorage[user_id]["dict_for_sra"][req['request']['command']][1]])
+            video, recipe = r[0], r[1]
+            sessionStorage[user_id]["cooking_mode"]["recipe"] = recipe
+            sessionStorage[user_id]["cooking_mode"]["video"] = video
             res['response']['buttons'] = [
                 {
                     'title': el,
@@ -359,19 +462,23 @@ def search_recipe(req, res):
                 } for el in btn_recipes_1
             ]
             res['response']['buttons'][0] = {
-                'title': 'Вот и рецепт.',
+                'title': 'Вот твой рецепт!',
                 'hide': True,
-                'url': recipe
+                'url': video
             }
             res['response']['text'] = f"Попробуй приготовить это!"
         else:
             res['response']['text'] = f"Извини, я не смогла найти что-то подходящее..."
+        return
 
 
 def random_recipe(req, res):
     sessionStorage[user_id]["status"] = 'choice'
-    recipe = random_meal()
-    res['response']['text'] = "Попробуй приготовить это!"
+    r = random_meal()
+    video, recipe, name = r[0], r[1], r[2]
+    sessionStorage[user_id]["cooking_mode"]["recipe"] = recipe
+    sessionStorage[user_id]["cooking_mode"]["video"] = video
+    res['response']['text'] = f"Попробуй приготовить {name}!"
     res['response']['buttons'] = [
         {
             'title': el,
@@ -381,14 +488,14 @@ def random_recipe(req, res):
     res['response']['buttons'][0] = {
         'title': 'Вот твой рецепт!',
         'hide': True,
-        'url': recipe
+        'url': video
     }
 
 
 def near_market(req, res):
     address = req['request']['command']
     if sessionStorage[user_id]["status"] == 'get_address':
-        if 'выйти' in address:  # другие варианты
+        if 'выйти' in address or 'хватит' in address or 'назад' in address:  # другие варианты
             sessionStorage[user_id]["status"] = 'choice'
             after_answer(req, res)
             return
