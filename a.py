@@ -14,7 +14,8 @@ def searching_recipe_name(meal):
         # recipe = json_response['meals'][0]['strInstructions'].splitlines()
         # print(translator.translate(recipe, dest='ru'))
         video = json_response['meals'][0]['strYoutube']
-        return video, recipe
+        name = translator.translate(json_response['meals'][0]['strMeal'], dest='ru').text
+        return video, recipe, name
     except:
         return ''
 
@@ -44,7 +45,8 @@ def searching_by_id(id):
     json_response = response.json()
     video = json_response['meals'][0]['strYoutube']
     recipe = (translator.translate(json_response['meals'][0]['strInstructions'], dest='ru').text).splitlines()
-    return video, recipe
+    name = translator.translate(json_response['meals'][0]['strMeal'], dest='ru').text
+    return video, recipe, name
 
 
 def random_meal():
