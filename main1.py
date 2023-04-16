@@ -2,7 +2,7 @@ from flask import Flask, request
 import logging
 import json
 from googletrans import Translator
-from a1 import *
+from a1 import searching_recipe_name, random_meal, searching_recipe_product, searching_by_id, searching_recipe_area
 from app import get_cor, get_shops, YandexImages
 import requests
 
@@ -23,12 +23,11 @@ yandex.set_auth_token(token='y0_AgAAAABDXC3pAAT7owAAAADdHZRtE0yZizUfTESzM4BFRe8l
 yandex.skills = 'dd9896e2-415e-493c-8dd2-dda4d5e6dac9'
 
 url = 'https://www.themealdb.com/api/json/v1/1/list.php?a=list'
-areas = ['American', 'British', 'Canadian', 'Chinese', 'Croatian', 'Dutch', 'Egyptian', 'French',
-         'Greek', 'Indian', 'Irish', 'Italian', 'Jamaican', 'Japanese', 'Kenyan', 'Malaysian',
-         'Mexican', 'Moroccan', 'Polish', 'Portuguese', 'Russian', 'Spanish', 'Thai', 'Tunisian',
-         'Turkish', 'Vietnamese']
+areas = []
 response = requests.request("GET", url)
 json_response = response.json()
+for el in json_response['meals']:
+    areas.append(el['strArea'])
 
 
 def list_areas(area):
@@ -140,9 +139,8 @@ def end(req, res):
 
 def get_recipe_for_mode(recipe):
     res = []
-    print(recipe)
     for el in recipe:
-        el = list(map(lambda x: x + '.' if x and x[-1] not in '.!' else x + '', el.split('.')))
+        el = list(map(lambda x: x + '.' if x and x[-1] != '.' else x + '', el.split('.')))
         for x in el:
             res.append(x.strip())
     res = list(filter(None, res))
@@ -223,11 +221,12 @@ def cooking_mode(req, res):  # активация режима
         after_answer(req, res)
         return
     elif 'да' in el or 'начина' in el or 'приступ' in el or 'начн' in el or 'точно':
+        # print(sessionStorage[user_id]["cooking_mode"]["recipe"])
         recipe = get_recipe_for_mode(sessionStorage[user_id]["cooking_mode"]["recipe"])
         sessionStorage[user_id]["cooking_mode"]["recipe"] = recipe
-
         sessionStorage[user_id]["cooking_mode"]["part"] = 0
         cooking_mode_on(req, res)
+        # print(recipe)
         return
     res['response']['text'] = 'Я тебя не понимаю. Попробуй использовать подсказки. Начинаем?'
     res['response']['buttons'] = [
@@ -369,6 +368,7 @@ def recipes(req, res):
         res['response'][
             'text'] = f'{sessionStorage[user_id]["first_name"]}! Скажи только продукт, который есть в блюде.'
         sessionStorage[user_id]["status"] = 'search_recipe_product'
+        print(1)
         return
     elif req['request']['command'] == 'по области' or cur_status == 'area_recipe':
         res['response'][
@@ -420,8 +420,7 @@ def search_recipe(req, res):
             return
     elif sessionStorage[user_id]["status"] == 'search_recipe_product':
         sessionStorage[user_id]["status"] = 'choice'
-
-        recipe = searching_recipe_product(str(req['request']['command']))
+        recipe = searching_recipe_product(req['request']['command'])
         if recipe:
             if req['request']['command'] not in sessionStorage[user_id]["dict_for_srp"]:
                 sessionStorage[user_id]["dict_for_srp"][req['request']['command']] = [recipe, 0]

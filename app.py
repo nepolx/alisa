@@ -129,14 +129,17 @@ def get_shops(cor):
     response = requests.get(map_request).json()
     shops = []
     addresses = []
+    names = []
     for i in range(len(response["features"])):
         t = response["features"][i]["geometry"]["coordinates"]
         shops.append(str(t[0]) + ',' + str(t[1]))
         addresses.append(response["features"][i]["properties"]["description"])
         # print(response["features"][i]["properties"]["description"])  # адрес
-        print(response["features"][i]["properties"]["CompanyMetaData"]["name"])
+        #print(response["features"][i]["properties"]["CompanyMetaData"]["name"])
+        names.append(response["features"][i]["properties"]["CompanyMetaData"]["name"])
+    print(names)
     if shops:
-        map_request = f"https://static-maps.yandex.ru/1.x/?l=map&pt={cor},pm2rdm~{shops[0]},pm2blm~{shops[1]},pm2vvm"
+        map_request = f"https://static-maps.yandex.ru/1.x/?l=map&pt={cor},pm2vvm~{shops[0]},pm2blm~{shops[1]},pm2blm"
         response = requests.get(map_request)
     else:
         return False
@@ -161,7 +164,7 @@ def get_shops(cor):
     # pygame.quit()
     #
     # os.remove(map_file)
-    return addresses
+    return addresses, names
 
 # cor = get_cor('г магнитогорск ул советская д 10')
 # get_shops(cor)
