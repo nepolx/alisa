@@ -2,7 +2,7 @@ from flask import Flask, request
 import logging
 import json
 from googletrans import Translator
-from a1 import searching_recipe_name, random_meal, searching_recipe_product, searching_by_id, searching_recipe_area
+from a import searching_recipe_name, random_meal, searching_recipe_product, searching_by_id, searching_recipe_area
 from app import get_cor, get_shops, YandexImages
 import requests
 
