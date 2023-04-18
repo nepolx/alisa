@@ -2,7 +2,7 @@ from flask import Flask, request
 import logging
 import json
 from googletrans import Translator
-from a1 import *
+from a import *
 from app import get_cor, get_shops, YandexImages
 import requests
 
@@ -21,22 +21,6 @@ sessionStorage = {}  # для каждого юзера своя инфа
 yandex = YandexImages()
 yandex.set_auth_token(token='y0_AgAAAABDXC3pAAT7owAAAADdHZRtE0yZizUfTESzM4BFRe8lhS52uFA')
 yandex.skills = 'dd9896e2-415e-493c-8dd2-dda4d5e6dac9'
-
-url = 'https://www.themealdb.com/api/json/v1/1/list.php?a=list'
-areas = ['American', 'British', 'Canadian', 'Chinese', 'Croatian', 'Dutch', 'Egyptian', 'French',
-         'Greek', 'Indian', 'Irish', 'Italian', 'Jamaican', 'Japanese', 'Kenyan', 'Malaysian',
-         'Mexican', 'Moroccan', 'Polish', 'Portuguese', 'Russian', 'Spanish', 'Thai', 'Tunisian',
-         'Turkish', 'Vietnamese']
-response = requests.request("GET", url)
-json_response = response.json()
-
-
-def list_areas(area):
-    translator = Translator()
-    area = translator.translate(area, dest='en').text
-    if area in areas:
-        return True
-    return False
 
 
 @app.route('/post', methods=['POST'])
@@ -119,6 +103,8 @@ def handle_dialog(res, req):
             cooking_mode_action(req, res)
         elif sessionStorage[user_id]["status"] == 'cooking_mode':
             cooking_mode(req, res)
+        elif sessionStorage[user_id]["status"] == 'waiting_for_recipe':
+            pause(req, res)
 
         # # если этот город среди известных нам,
         # # то показываем его (выбираем одну из двух картинок случайно)
@@ -128,6 +114,12 @@ def handle_dialog(res, req):
         #     res['response']['card']['title'] = 'Этот город я знаю.'
         #     res['response']['card']['image_id'] = random.choice(cities[city])
         #     res['response']['text'] = 'Я угадал!'
+
+
+def pause(req, res):
+    search_recipe(req, res)
+    res['response']['text'] = 'Мне нужно пару секунд на поиск рецепта. Чтобы продолжить, скажите "Дальше"'
+
 
 
 def end(req, res):
@@ -140,20 +132,21 @@ def end(req, res):
 
 def get_recipe_for_mode(recipe):
     res = []
-    print(recipe)
     for el in recipe:
+        el = el.replace(';', '.')
         el = list(map(lambda x: x + '.' if x and x[-1] not in '.!' else x + '', el.split('.')))
         for x in el:
             res.append(x.strip())
-    res = list(filter(None, res))
+    res = list(filter(lambda x: x != '' and not x[0:len(x) - 1].isdigit(), res))
     return res
 
 
 def cooking_mode_on(req, res):
     part = sessionStorage[user_id]["cooking_mode"]["part"]
     recipe = sessionStorage[user_id]["cooking_mode"]["recipe"]
+    print(recipe)
     ans = recipe[part:part + 2 if (part + 2) < len(recipe) else len(recipe)]
-    print(ans)
+    # print(ans)
     res['response']['text'] = ' '.join(ans)
     if part == 0:
         btn = btn_cooking_mode[1:]
