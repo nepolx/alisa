@@ -9,7 +9,7 @@ areas = ['American', 'British', 'Canadian', 'Chinese', 'Croatian', 'Dutch', 'Egy
          'Turkish', 'Vietnamese']
 
 
-def translate_try(s, type='def'):
+def translate_try(s, type='def'): #recipe
     while True:
         try:
             if type == 'def':
@@ -17,7 +17,8 @@ def translate_try(s, type='def'):
             elif type == 'name':
                 s = translator.translate(s, dest='ru', src='en').text
             else:
-                s = translator.translate(s, dest='ru', src='en').text.splitlines()
+                #s = translator.translate(s, dest='ru', src='en').text.splitlines()
+                s = translator.translate(s, dest='ru', src='en').text
             return s
         except:
             print(1)
@@ -37,7 +38,8 @@ def searching_recipe_name(meal):
     try:
         response = requests.request("GET", url)
         json_response = response.json()
-        recipe = translate_try(json_response['meals'][0]['strInstructions'], type='recipe')
+        #recipe = translate_try(json_response['meals'][0]['strInstructions'], type='recipe')
+        recipe = json_response['meals'][0]['strInstructions'].splitlines()
         # recipe = json_response['meals'][0]['strInstructions'].splitlines()
         # print(translator.translate(recipe, dest='ru'))
         video = json_response['meals'][0]['strYoutube']
@@ -66,7 +68,8 @@ def searching_by_id(id):
     response = requests.request("GET", url)
     json_response = response.json()
     video = json_response['meals'][0]['strYoutube']
-    recipe = translate_try(json_response['meals'][0]['strInstructions'], type='recipe')
+    #recipe = translate_try(json_response['meals'][0]['strInstructions'], type='recipe')
+    recipe = json_response['meals'][0]['strInstructions'].splitlines()
     name = translate_try(json_response['meals'][0]['strMeal'], type='name')
     return video, recipe, name
 
@@ -77,7 +80,8 @@ def random_meal():
     json_response = response.json()
     name = translate_try(json_response['meals'][0]['strMeal'], type='name')
     video = json_response['meals'][0]['strYoutube']
-    recipe = translate_try(json_response['meals'][0]['strInstructions'], type='recipe')
+    #recipe = translate_try(json_response['meals'][0]['strInstructions'], type='recipe')
+    recipe = json_response['meals'][0]['strInstructions'].splitlines()
     return video, recipe, name
 
 
