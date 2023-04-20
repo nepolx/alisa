@@ -52,6 +52,7 @@ def handle_dialog(res, req):
         sessionStorage[user_id]["dict_for_srp"] = {}
         sessionStorage[user_id]["dict_for_sra"] = {}
         sessionStorage[user_id]["cooking_mode"] = {}
+        sessionStorage[user_id]["stop"] = 0
 
         return
 
@@ -73,7 +74,7 @@ def handle_dialog(res, req):
                 'text'] = 'Приятно познакомиться, ' \
                           + first_name.title() \
                           + '. Я могу сказать рецепты по разным категориям, а также показать ближайшие к тебе магазины. ' \
-                            'Если ты захочешь выйти из навыка, скажи "пока".' \
+                            'Если ты захочешь выйти из навыка или вернуться в меню, скажи "пока", "хватит" соответственно.' \
                             ' Чем я могу помочь?'
             # получаем варианты buttons из ключей нашего словаря cities
             res['response']['buttons'] = [
@@ -148,7 +149,10 @@ def end(req, res):
 
 def search_recipe_res(req, res):
     search_recipe(req, res)
+    if sessionStorage[user_id]["status"] == 0:
+        return
     if sessionStorage[user_id]["cooking_mode"]["answer"]:
+        sessionStorage[user_id]["stop"] = 0
         sessionStorage[user_id]["status"] = 'choice'
         sessionStorage[user_id]["cooking_mode"]["answer"] = False
         res['response']['buttons'] = [
@@ -168,8 +172,11 @@ def search_recipe_res(req, res):
         res['response'][
             'text'] = f'Я знаю рецепт блюда "{sessionStorage[user_id]["cooking_mode"]["name"]}"! ' \
                       f'Если хочешь приготовить его со мной, скажи "режим готовки".'
-    else:
+    elif sessionStorage[user_id]["stop"] < 1:
+        sessionStorage[user_id]["stop"] += 1
         res['response']['text'] = 'Извини, я не смогла найти чего-то подходящего...'
+    else:
+        res['response']['text'] = 'Извини, я не смогла найти чего-то подходящего... Если ты хочешь найти другое, скажи "хватит".'
 
 
 def get_recipe_for_mode(recipe):
@@ -323,6 +330,7 @@ def get_answer(req, res):  # рецепт, таймер ил итд
     el = req['request']['command']
     if 'рецепт' in el or 'готовить' in el or 'блюдо' in el:
         sessionStorage[user_id]["status"] = 'recipes'
+        sessionStorage[user_id]["stop"] = 0
         res['response']['text'] = 'Я могу показать тебе рецепт определенного блюда, рецепт блюда по ингридиенту ' \
                                   'или по области, рецепт рандомного блюда.'
         res['response']['buttons'] = [
@@ -335,6 +343,7 @@ def get_answer(req, res):  # рецепт, таймер ил итд
 
     elif 'магазин' in el or 'купить' in el and (
             'продукт' in el or 'ингридиент' in el) or 'супермаркет' in el:  # пересмотреть
+        sessionStorage[user_id]["stop"] = 0
         sessionStorage[user_id]["status"] = 'shops'
         res['response'][
             'text'] = 'Скажи полный адрес своего местоположения. Например, город Пушкина, ул Колотушкина, д 7'
@@ -393,19 +402,23 @@ def recipes(req, res):
         cur_status = 'name_recipe'
 
     if req['request']['command'] == 'по названию' or cur_status == 'name_recipe':
+        sessionStorage[user_id]["stop"] = 0
         res['response'][
             'text'] = f'{sessionStorage[user_id]["first_name"]}! Скажи только блюдо, рецепт которого ты хочешь найти.'
         sessionStorage[user_id]["status"] = 'search_recipe_name'
         return
     elif req['request']['command'] == 'любое блюдо' or cur_status == 'random_recipe':
+        sessionStorage[user_id]["stop"] = 0
         random_recipe(req, res)
         return
     elif req['request']['command'] == 'по ингридиенту' or cur_status == 'product_recipe':
+        sessionStorage[user_id]["stop"] = 0
         res['response'][
             'text'] = f'{sessionStorage[user_id]["first_name"]}! Скажи только продукт, который есть в блюде.'
         sessionStorage[user_id]["status"] = 'search_recipe_product'
         return
     elif req['request']['command'] == 'по области' or cur_status == 'area_recipe':
+        sessionStorage[user_id]["stop"] = 0
         res['response'][
             'text'] = f'{sessionStorage[user_id]["first_name"]}! Скажи только вид нужной кухни. Например, китайская.'
         sessionStorage[user_id]["status"] = 'search_recipe_area'
@@ -419,13 +432,21 @@ def recipes(req, res):
             'hide': True
         } for el in btn_recipes
     ]
-    res['response']['text'] = 'Я тебя не понимаю. Попробуй использовать подсказки!'
+    if sessionStorage[user_id]["stop"] < 1:
+        res['response']['text'] = 'Я не понимаю тебя. Попробуй воспользоваться подсказками!'
+        sessionStorage[user_id]["stop"] += 1
+    else:
+        res['response']['text'] = 'Я не понимаю тебя. Если ты хочешь найти что-то другое. Скажи "хватит".'
 
 
 def search_recipe(req, res):
     # print(req['request']['command'])
 
     if end(req, res):
+        return
+    el = req['request']['command']
+    if 'не' in el or 'вернись' in el or 'выйти' in el or 'хватит' in el:
+        after_answer(req, res)
         return
     if sessionStorage[user_id]["status"] == 'search_recipe_name':
         ans = searching_recipe_name(req['request']['command'])
