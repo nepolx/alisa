@@ -10,7 +10,7 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
 buttons = ['Поиск рецептов', 'Ближайший магазин', 'Пока']
-btn_recipes = ['По названию', 'По ингридиенту', 'По области', 'Любое блюдо', 'Другое']
+btn_recipes = ['По названию', 'По ингредиенту', 'По области', 'Любое блюдо', 'Другое']
 btn_recipes_1 = ['video', 'Режим готовки', 'Хочу еще спросить!', 'Пока']
 btn_cooking_mode = ['Назад', 'Дальше', 'Хватит']
 user_id = 0
@@ -331,7 +331,7 @@ def get_answer(req, res):  # рецепт, таймер ил итд
     if 'рецепт' in el or 'готовить' in el or 'блюдо' in el:
         sessionStorage[user_id]["status"] = 'recipes'
         sessionStorage[user_id]["stop"] = 0
-        res['response']['text'] = 'Я могу показать тебе рецепт определенного блюда, рецепт блюда по ингридиенту ' \
+        res['response']['text'] = 'Я могу показать тебе рецепт определенного блюда, рецепт блюда по ингредиенту ' \
                                   'или по области, рецепт рандомного блюда.'
         res['response']['buttons'] = [
             {
@@ -342,7 +342,7 @@ def get_answer(req, res):  # рецепт, таймер ил итд
         return
 
     elif 'магазин' in el or 'купить' in el and (
-            'продукт' in el or 'ингридиент' in el) or 'супермаркет' in el:  # пересмотреть
+            'продукт' in el or 'ингредиент' in el) or 'супермаркет' in el:  # пересмотреть
         sessionStorage[user_id]["stop"] = 0
         sessionStorage[user_id]["status"] = 'shops'
         res['response'][
@@ -379,7 +379,7 @@ def recipes(req, res):
         options['random_recipe'] += 1
         options['product_recipe'] += 1
         options['area_recipe'] += 1
-    if 'продукт' in el or 'ингридиент' in el:
+    if 'продукт' in el or 'ингредиент' in el:
         options['product_recipe'] += 1
     if ' не ' in el:
         options['name_recipe'] -= 1
@@ -411,7 +411,7 @@ def recipes(req, res):
         sessionStorage[user_id]["stop"] = 0
         random_recipe(req, res)
         return
-    elif req['request']['command'] == 'по ингридиенту' or cur_status == 'product_recipe':
+    elif req['request']['command'] == 'по ингредиенту' or cur_status == 'product_recipe':
         sessionStorage[user_id]["stop"] = 0
         res['response'][
             'text'] = f'{sessionStorage[user_id]["first_name"]}! Скажи только продукт, который есть в блюде.'
